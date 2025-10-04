@@ -252,6 +252,10 @@ t0 = time.time()
 local_iter_num = 0 # number of iterations in the lifetime of this process
 raw_model = model.module if ddp else model # unwrap DDP container if needed
 running_mfu = -1.0
+
+train_steps_loss = [] # keeps track for curve plotting
+val_steps_loss = []    # keeps track for curve plotting
+
 while True:
 
     # determine and set the learning rate for this iteration
@@ -262,6 +266,8 @@ while True:
     # evaluate the loss on train/val sets and write checkpoints
     if iter_num % eval_interval == 0 and master_process:
         losses = estimate_loss()
+        train_steps_loss.append(losses['train'])
+        val_steps_loss.append(losses['val'])
         print(f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
         if wandb_log:
             wandb.log({
@@ -334,3 +340,26 @@ while True:
 
 if ddp:
     destroy_process_group()
+
+# added by megha
+
+import matplotlib.pyplot as plt
+
+def plot_loss_curve(train_losses, val_losses, title="Train-Val-loss", save_path=None):
+    steps = range(0, max_iters+1 , eval_interval)
+    plt.figure(figsize=(10, 6))
+    plt.plot(steps, train_losses, label='Train Loss', color='blue', marker='o', markersize=5, linestyle='-')
+    plt.plot(steps, val_losses, label='Val Loss',  color='red', marker='o', markersize=5, linestyle='-')
+    plt.title(title)
+    plt.xlabel('Steps')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    if save_path:
+        plt.savefig(save_path)
+        print(f"Plot saved to {save_path}")
+    plt.show()
+
+# Plot and save the curves to a file
+plot_loss_curve(train_steps_loss, val_steps_loss, title="Train-Val-loss", save_path="loss_curve.png")
